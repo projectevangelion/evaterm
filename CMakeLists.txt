@@ -66,3 +66,9 @@ add_test(NAME ParserTest COMMAND test_parser)
 add_executable(test_buffer tests/test_buffer.cpp src/ScreenBuffer.cpp src/Theme.cpp)
 target_link_libraries(test_buffer PRIVATE util)
 add_test(NAME BufferTest COMMAND test_buffer)
+
+# Installation targets
+include(GNUInstallDirs)
+install(TARGETS evaterm RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(DIRECTORY config/ DESTINATION ${CMAKE_INSTALL_DATADIR}/evaterm/config)
+install(FILES terminfo/xterm-evaterm.terminfo DESTINATION ${CMAKE_INSTALL_DATADIR}/evaterm/terminfo)
