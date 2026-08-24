@@ -113,6 +113,7 @@ void ScreenBuffer::resize(int new_rows, int new_cols) {
 void ScreenBuffer::push_row_to_scrollback(const std::vector<Cell>& row) {
     if (using_alt_buffer_ || scrollback_max_ == 0) return;
     scrollback_.push_back(row);
+    total_lines_pushed_++;
     if (scrollback_.size() > scrollback_max_) {
         scrollback_.pop_front();
     }
@@ -602,6 +603,60 @@ std::string ScreenBuffer::get_selected_text() const {
 void ScreenBuffer::update_default_colors(const Color& fg, const Color& bg) {
     default_fg_ = fg;
     default_bg_ = bg;
+}
+
+void ScreenBuffer::add_image(std::shared_ptr<ImageData> img) {
+    if (img) {
+        loaded_images_[img->id] = img;
+    }
+}
+
+std::shared_ptr<ImageData> ScreenBuffer::get_image(uint32_t id) const {
+    auto it = loaded_images_.find(id);
+    if (it != loaded_images_.end()) {
+        return it->second;
+    }
+    return nullptr;
+}
+
+void ScreenBuffer::place_image(ImagePlacement placement) {
+    placement.in_alt_buffer = using_alt_buffer_;
+    if (using_alt_buffer_) {
+        placement.absolute_line = cursor_.row;
+        alt_image_placements_.push_back(placement);
+    } else {
+        placement.absolute_line = total_lines_pushed_ + cursor_.row;
+        image_placements_.push_back(placement);
+    }
+}
+
+void ScreenBuffer::delete_images(uint32_t image_id) {
+    auto filter_fn = [image_id](const ImagePlacement& p) {
+        return image_id == 0 || p.image_id == image_id;
+    };
+    image_placements_.erase(
+        std::remove_if(image_placements_.begin(), image_placements_.end(), filter_fn),
+        image_placements_.end()
+    );
+    alt_image_placements_.erase(
+        std::remove_if(alt_image_placements_.begin(), alt_image_placements_.end(), filter_fn),
+        alt_image_placements_.end()
+    );
+    if (image_id == 0) {
+        loaded_images_.clear();
+    } else {
+        loaded_images_.erase(image_id);
+    }
+}
+
+void ScreenBuffer::clear_all_images() {
+    image_placements_.clear();
+    alt_image_placements_.clear();
+    loaded_images_.clear();
+}
+
+const std::vector<ImagePlacement>& ScreenBuffer::get_image_placements() const {
+    return using_alt_buffer_ ? alt_image_placements_ : image_placements_;
 }
 
 } // namespace evaterm

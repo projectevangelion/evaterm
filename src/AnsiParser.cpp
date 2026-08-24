@@ -1,6 +1,7 @@
 #include "AnsiParser.hpp"
 #include <iostream>
 #include <sstream>
+#include <fstream>
 
 namespace evaterm {
 
@@ -14,6 +15,9 @@ void AnsiParser::reset() {
     reset_csi_params();
     reset_sgr();
     osc_string_.clear();
+    apc_string_.clear();
+    kitty_chunk_payload_.clear();
+    kitty_active_params_.clear();
     utf8_codepoint_ = 0;
     utf8_bytes_remaining_ = 0;
 }
@@ -40,11 +44,14 @@ void AnsiParser::parse(const char* data, size_t length) {
 }
 
 void AnsiParser::process_byte(uint8_t byte) {
-    // Check for universal escape cancellations
-    if (byte == 0x1B) { // ESC
+    // Check for global cancellation/escape sequences
+    if (byte == 0x1B) { // ESC always transitions to Escape state (except inside string terminator)
+        if (state_ == ParserState::ApcString) {
+            handle_apc(byte);
+            return;
+        }
         state_ = ParserState::Escape;
-        reset_csi_params();
-        osc_string_.clear();
+        intermediate_char_ = 0;
         return;
     }
 
@@ -68,6 +75,9 @@ void AnsiParser::process_byte(uint8_t byte) {
             break;
         case ParserState::OscString:
             handle_osc(byte);
+            break;
+        case ParserState::ApcString:
+            handle_apc(byte);
             break;
         default:
             state_ = ParserState::Ground;
@@ -140,6 +150,9 @@ void AnsiParser::handle_escape(uint8_t byte) {
     } else if (byte == ']') {
         state_ = ParserState::OscString;
         osc_string_.clear();
+    } else if (byte == '_') { // APC (Kitty Graphics Protocol)
+        state_ = ParserState::ApcString;
+        apc_string_.clear();
     } else if (byte == '(' || byte == ')' || byte == '*' || byte == '+' || byte == '-' || byte == '.' || byte == '/' || byte == '#' || byte == '%' || byte == ' ') {
         // Multi-byte escape sequence intermediate (e.g. \033(B)
         intermediate_char_ = static_cast<char>(byte);
@@ -471,6 +484,207 @@ void AnsiParser::execute_osc() {
             }
         } catch (...) {}
     }
+}
+
+void AnsiParser::handle_apc(uint8_t byte) {
+    if (byte == 0x07) { // BEL terminates APC
+        execute_kitty_graphics();
+        state_ = ParserState::Ground;
+        return;
+    }
+    if (byte == 0x1B) { // ESC (may start ST \033\)
+        apc_string_.push_back(static_cast<char>(byte));
+        return;
+    }
+    if (byte == '\\' && !apc_string_.empty() && apc_string_.back() == 0x1B) {
+        apc_string_.pop_back(); // Remove ESC
+        execute_kitty_graphics();
+        state_ = ParserState::Ground;
+        return;
+    }
+    if (!apc_string_.empty() && apc_string_.back() == 0x1B) {
+        apc_string_.pop_back();
+        execute_kitty_graphics();
+        state_ = ParserState::Escape;
+        handle_escape(byte);
+        return;
+    }
+
+    apc_string_.push_back(static_cast<char>(byte));
+}
+
+void AnsiParser::execute_kitty_graphics() {
+    if (apc_string_.empty() || apc_string_[0] != 'G') {
+        return;
+    }
+
+    // Format: G<k>=<v>,<k>=<v>...;<payload>
+    size_t semi_pos = apc_string_.find(';');
+    std::string keys_str = (semi_pos != std::string::npos) ? apc_string_.substr(1, semi_pos - 1) : apc_string_.substr(1);
+    std::string payload = (semi_pos != std::string::npos) ? apc_string_.substr(semi_pos + 1) : "";
+
+    // Parse keys
+    std::stringstream ss(keys_str);
+    std::string token;
+    while (std::getline(ss, token, ',')) {
+        size_t eq = token.find('=');
+        if (eq != std::string::npos) {
+            std::string k = token.substr(0, eq);
+            std::string v = token.substr(eq + 1);
+            kitty_active_params_[k] = v;
+        }
+    }
+
+    // Accumulate payload
+    kitty_chunk_payload_ += payload;
+
+    // Check if more chunks are expected
+    auto it_m = kitty_active_params_.find("m");
+    if (it_m != kitty_active_params_.end() && it_m->second == "1") {
+        return; // Wait for m=0
+    }
+
+    auto get_str = [this](const std::string& key, const std::string& def) -> std::string {
+        auto it = kitty_active_params_.find(key);
+        return (it != kitty_active_params_.end()) ? it->second : def;
+    };
+    auto get_int = [&get_str](const std::string& key, int def) -> int {
+        std::string s = get_str(key, "");
+        if (s.empty()) return def;
+        try { return std::stoi(s); } catch (...) { return def; }
+    };
+
+    std::string action = get_str("a", !kitty_chunk_payload_.empty() ? "T" : "t");
+    int format = get_int("f", 100);
+    std::string medium = get_str("t", "d");
+    int src_w = get_int("s", 0);
+    int src_h = get_int("v", 0);
+    int cols = get_int("c", 0);
+    int rows = get_int("r", 0);
+    uint32_t image_id = static_cast<uint32_t>(get_int("i", 0));
+    uint32_t placement_id = static_cast<uint32_t>(get_int("p", 0));
+    int quiet = get_int("q", 0);
+    int crop_x = get_int("x", 0);
+    int crop_y = get_int("y", 0);
+    int crop_w = get_int("w", 0);
+    int crop_h = get_int("h", 0);
+    bool dont_move_cursor = (get_str("C", "0") == "1");
+
+    if (action == "d" || action == "D") {
+        buffer_.delete_images(image_id);
+        if (quiet == 0 && response_callback_) {
+            response_callback_("\033_Gi=" + std::to_string(image_id) + ";OK\033\\");
+        }
+    } else if (action == "q" || action == "Q") {
+        if (response_callback_) {
+            response_callback_("\033_Gi=" + std::to_string(image_id) + ";OK\033\\");
+        }
+    } else if (action == "t" || action == "T") {
+        std::vector<uint8_t> image_bytes;
+        if (medium == "f") {
+            std::string file_path;
+            auto decoded_path = base64_decode(kitty_chunk_payload_);
+            if (!decoded_path.empty()) {
+                file_path = std::string(decoded_path.begin(), decoded_path.end());
+            } else {
+                file_path = kitty_chunk_payload_;
+            }
+            std::ifstream file(file_path, std::ios::binary);
+            if (file.is_open()) {
+                image_bytes.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+            }
+        } else {
+            image_bytes = base64_decode(kitty_chunk_payload_);
+        }
+
+        if (!image_bytes.empty()) {
+            if (image_id == 0) {
+                image_id = next_image_id_++;
+            }
+            auto img = create_image_from_memory(image_id, image_bytes.data(), image_bytes.size(), format, src_w, src_h);
+            if (img) {
+                buffer_.add_image(img);
+
+                if (action == "T") {
+                    if (cols <= 0 && rows <= 0) {
+                        cols = std::clamp((img->pixel_width + 8) / 9, 1, buffer_.get_cols());
+                        rows = std::clamp((img->pixel_height + 17) / 18, 1, buffer_.get_rows());
+                    } else if (cols <= 0 && rows > 0) {
+                        cols = std::max(1, (rows * 18 * img->pixel_width) / std::max(1, img->pixel_height * 9));
+                    } else if (rows <= 0 && cols > 0) {
+                        rows = std::max(1, (cols * 9 * img->pixel_height) / std::max(1, img->pixel_width * 18));
+                    }
+
+                    ImagePlacement placement;
+                    placement.image_id = img->id;
+                    placement.placement_id = placement_id;
+                    placement.image = img;
+                    placement.start_col = buffer_.get_cursor_col();
+                    placement.cols = cols;
+                    placement.rows = rows;
+                    placement.src_x = crop_x;
+                    placement.src_y = crop_y;
+                    placement.src_w = crop_w;
+                    placement.src_h = crop_h;
+
+                    buffer_.place_image(placement);
+
+                    if (!dont_move_cursor) {
+                        for (int r = 0; r < rows; ++r) {
+                            buffer_.newline();
+                        }
+                        buffer_.carriage_return();
+                    }
+                }
+
+                if (quiet == 0 && response_callback_) {
+                    response_callback_("\033_Gi=" + std::to_string(image_id) + ";OK\033\\");
+                }
+            } else if (quiet != 2 && response_callback_) {
+                response_callback_("\033_Gi=" + std::to_string(image_id) + ";EINVAL\033\\");
+            }
+        }
+    } else if (action == "p" || action == "P") {
+        auto img = buffer_.get_image(image_id);
+        if (img) {
+            if (cols <= 0 && rows <= 0) {
+                cols = std::clamp((img->pixel_width + 8) / 9, 1, buffer_.get_cols());
+                rows = std::clamp((img->pixel_height + 17) / 18, 1, buffer_.get_rows());
+            } else if (cols <= 0 && rows > 0) {
+                cols = std::max(1, (rows * 18 * img->pixel_width) / std::max(1, img->pixel_height * 9));
+            } else if (rows <= 0 && cols > 0) {
+                rows = std::max(1, (cols * 9 * img->pixel_height) / std::max(1, img->pixel_width * 18));
+            }
+
+            ImagePlacement placement;
+            placement.image_id = img->id;
+            placement.placement_id = placement_id;
+            placement.image = img;
+            placement.start_col = buffer_.get_cursor_col();
+            placement.cols = cols;
+            placement.rows = rows;
+            placement.src_x = crop_x;
+            placement.src_y = crop_y;
+            placement.src_w = crop_w;
+            placement.src_h = crop_h;
+
+            buffer_.place_image(placement);
+
+            if (!dont_move_cursor) {
+                for (int r = 0; r < rows; ++r) {
+                    buffer_.newline();
+                }
+                buffer_.carriage_return();
+            }
+
+            if (quiet == 0 && response_callback_) {
+                response_callback_("\033_Gi=" + std::to_string(image_id) + ";OK\033\\");
+            }
+        }
+    }
+
+    kitty_chunk_payload_.clear();
+    kitty_active_params_.clear();
 }
 
 } // namespace evaterm

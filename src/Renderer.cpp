@@ -212,6 +212,47 @@ void Renderer::render_terminal_grid(const ScreenBuffer& buffer, int grid_top, in
         }
     }
 
+    // 1.5 Render Active Images
+    const auto& images = buffer.get_image_placements();
+    for (const auto& img : images) {
+        if (!img.image) continue;
+        if (!img.image->texture_uploaded) {
+            img.image->upload_gl_texture();
+        }
+        if (img.image->texture_id == 0) continue;
+
+        int visual_row = 0;
+        if (img.in_alt_buffer) {
+            visual_row = static_cast<int>(img.absolute_line);
+        } else {
+            visual_row = static_cast<int>((img.absolute_line - buffer.get_total_lines_pushed()) + buffer.get_scroll_offset());
+        }
+
+        // Check if image is vertically within viewable terminal area
+        if (visual_row + img.rows <= 0 || visual_row >= rows) {
+            continue;
+        }
+
+        float px = static_cast<float>(grid_left + img.start_col * cell_w);
+        float py = static_cast<float>(grid_top + visual_row * cell_h);
+        float pw = static_cast<float>(img.cols * cell_w);
+        float ph = static_cast<float>(img.rows * cell_h);
+
+        glEnable(GL_TEXTURE_2D);
+        glBindTexture(GL_TEXTURE_2D, img.image->texture_id);
+        glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+
+        glBegin(GL_QUADS);
+        glTexCoord2f(0.0f, 0.0f); glVertex2f(px, py);
+        glTexCoord2f(1.0f, 0.0f); glVertex2f(px + pw, py);
+        glTexCoord2f(1.0f, 1.0f); glVertex2f(px + pw, py + ph);
+        glTexCoord2f(0.0f, 1.0f); glVertex2f(px, py + ph);
+        glEnd();
+
+        glBindTexture(GL_TEXTURE_2D, 0);
+        glDisable(GL_TEXTURE_2D);
+    }
+
     // 2. Pass 2: Foreground Glyphs and Text Attributes
     for (int r = 0; r < rows; ++r) {
         float py = static_cast<float>(grid_top + r * cell_h);

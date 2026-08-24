@@ -16,6 +16,7 @@ enum class ParserState {
     CsiIntermediate,
     CsiIgnore,
     OscString,
+    ApcString,
     DcsEntry,
     DcsParam,
     DcsString,
@@ -59,8 +60,12 @@ private:
     bool is_private_ = false;
     char intermediate_char_ = 0;
 
-    // OSC string accumulation
+    // OSC & APC string accumulation
     std::string osc_string_;
+    std::string apc_string_;
+    std::string kitty_chunk_payload_;
+    std::unordered_map<std::string, std::string> kitty_active_params_;
+    uint32_t next_image_id_ = 1;
 
     // UTF-8 decoder state
     uint32_t utf8_codepoint_ = 0;
@@ -75,10 +80,12 @@ private:
     void handle_escape_intermediate(uint8_t byte);
     void handle_csi(uint8_t byte);
     void handle_osc(uint8_t byte);
+    void handle_apc(uint8_t byte);
 
     void execute_csi_command(uint8_t final_char);
     void execute_sgr();
     void execute_osc();
+    void execute_kitty_graphics();
     void reset_csi_params();
     void reset_sgr();
 

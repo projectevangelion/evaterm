@@ -21,6 +21,11 @@ A modern, fast, GPU-accelerated tabbed terminal emulator written in Modern C++ (
   - Pre-configured to match your **Crimson Flame** Kitty theme by default.
   - Built-in theme presets: `crimson_flame`, `catppuccin_mocha`, `tokyo_night`, `dracula`, `nord`, `gruvbox_dark`.
   - Full 16 ANSI colors, 256 colors, and 24-bit TrueColor RGB support.
+- **Kitty Graphics Protocol & Image Rendering**:
+  - Full support for the **Kitty Graphics Protocol** (`\033_G...;\033\`).
+  - Supports PNG, JPEG, GIF, BMP, and 24/32-bit raw RGB/RGBA image streams directly in your terminal.
+  - Works with CLI tools like `kitten icat`, `fastfetch`, `yazi`, `viu`, `chafa`, and `ranger`.
+  - Images scroll naturally with the terminal grid and scrollback history.
 - **High-Performance Rendering**:
   - GPU-accelerated OpenGL text quad rendering with FreeType font engine and 32-bit RGBA dynamic glyph atlas.
   - Crisp, anti-aliased font rendering with integer pixel coordinate snapping.

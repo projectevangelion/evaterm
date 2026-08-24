@@ -124,6 +124,28 @@ void test_charset_designation_escape() {
     std::cout << "[PASS] test_charset_designation_escape\n";
 }
 
+void test_kitty_graphics_protocol() {
+    evaterm::Theme theme = evaterm::Theme::CrimsonFlame();
+    evaterm::ScreenBuffer buffer(24, 80, theme.foreground, theme.background);
+    evaterm::AnsiParser parser(buffer, theme);
+
+    // 1x1 Red pixel RGBA: /wAA/w==
+    std::string kitty_seq = "\033_Ga=T,f=32,s=1,v=1,c=2,r=1,q=2;/wAA/w==\033\\";
+    parser.parse(kitty_seq.data(), kitty_seq.size());
+
+    const auto& images = buffer.get_image_placements();
+    assert(images.size() == 1);
+    assert(images[0].cols == 2);
+    assert(images[0].rows == 1);
+    assert(images[0].image != nullptr);
+    assert(images[0].image->pixel_width == 1);
+    assert(images[0].image->pixel_height == 1);
+    assert(images[0].image->rgba_data.size() == 4);
+    assert(images[0].image->rgba_data[0] == 0xFF); // Red
+
+    std::cout << "[PASS] test_kitty_graphics_protocol\n";
+}
+
 int main() {
     std::cout << "Running AnsiParser Unit Tests...\n";
     test_basic_text();
@@ -132,6 +154,7 @@ int main() {
     test_osc_title();
     test_alt_screen_buffer();
     test_charset_designation_escape();
+    test_kitty_graphics_protocol();
     std::cout << "All AnsiParser Tests Passed!\n";
     return 0;
 }

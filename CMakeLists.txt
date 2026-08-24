@@ -29,6 +29,7 @@ link_directories(
 
 set(CORE_SOURCES
     include/Cell.hpp
+    src/Image.cpp
     src/Theme.cpp
     src/Config.cpp
     src/Pty.cpp
@@ -59,12 +60,12 @@ target_link_libraries(evaterm PRIVATE
 # Unit Tests
 enable_testing()
 
-add_executable(test_parser tests/test_parser.cpp src/AnsiParser.cpp src/ScreenBuffer.cpp src/Theme.cpp)
-target_link_libraries(test_parser PRIVATE util)
+add_executable(test_parser tests/test_parser.cpp src/AnsiParser.cpp src/ScreenBuffer.cpp src/Theme.cpp src/Image.cpp)
+target_link_libraries(test_parser PRIVATE ${OPENGL_LIBRARIES} util)
 add_test(NAME ParserTest COMMAND test_parser)
 
-add_executable(test_buffer tests/test_buffer.cpp src/ScreenBuffer.cpp src/Theme.cpp)
-target_link_libraries(test_buffer PRIVATE util)
+add_executable(test_buffer tests/test_buffer.cpp src/ScreenBuffer.cpp src/Theme.cpp src/Image.cpp)
+target_link_libraries(test_buffer PRIVATE ${OPENGL_LIBRARIES} util)
 add_test(NAME BufferTest COMMAND test_buffer)
 
 # Installation targets

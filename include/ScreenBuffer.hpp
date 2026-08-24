@@ -1,11 +1,13 @@
 #pragma once
 
 #include "Cell.hpp"
+#include "Image.hpp"
 #include <vector>
 #include <deque>
 #include <string>
 #include <memory>
 #include <algorithm>
+#include <unordered_map>
 
 namespace evaterm {
 
@@ -122,6 +124,15 @@ public:
 
     void update_default_colors(const Color& fg, const Color& bg);
 
+    // Kitty Graphics / Images
+    void add_image(std::shared_ptr<ImageData> img);
+    std::shared_ptr<ImageData> get_image(uint32_t id) const;
+    void place_image(ImagePlacement placement);
+    void delete_images(uint32_t image_id);
+    void clear_all_images();
+    const std::vector<ImagePlacement>& get_image_placements() const;
+    int64_t get_total_lines_pushed() const { return total_lines_pushed_; }
+
 private:
     int rows_ = 24;
     int cols_ = 80;
@@ -133,6 +144,11 @@ private:
     std::vector<std::vector<Cell>> grid_;
     std::deque<std::vector<Cell>> scrollback_;
     std::vector<std::vector<Cell>> alt_grid_;
+
+    int64_t total_lines_pushed_ = 0;
+    std::unordered_map<uint32_t, std::shared_ptr<ImageData>> loaded_images_;
+    std::vector<ImagePlacement> image_placements_;
+    std::vector<ImagePlacement> alt_image_placements_;
 
     bool using_alt_buffer_ = false;
     int scroll_offset_ = 0; // 0 = live, > 0 = lines scrolled up
