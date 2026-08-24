@@ -1,4 +1,4 @@
-# EvaTerm 🚀
+# EvaTerm
 
 A modern, fast, GPU-accelerated tabbed terminal emulator written in Modern C++ (C++20) using SDL2, OpenGL, and FreeType.
 
@@ -8,7 +8,7 @@ A modern, fast, GPU-accelerated tabbed terminal emulator written in Modern C++ (
 
 ---
 
-## ✨ Features
+## Features
 
 - **Multi-Tab Session Architecture**:
   - Independent concurrent PTY processes running in the background for each tab.
@@ -17,7 +17,7 @@ A modern, fast, GPU-accelerated tabbed terminal emulator written in Modern C++ (
   - Automatic tab titles via OSC escape sequences and process name introspection.
 - **Customizable Configuration System (`evaterm.conf`)**:
   - Full config file format supporting `key value`, inline colors, and `include` directives.
-  - **Live Inotify Hot-Reloading**: Changes to `~/.config/evaterm/evaterm.conf` are automatically applied the moment you save the file in your editor!
+  - **Live Inotify Hot-Reloading**: Changes to `~/.config/evaterm/evaterm.conf` are automatically applied the moment you save the file in your editor.
   - Pre-configured to match your **Crimson Flame** Kitty theme by default.
   - Built-in theme presets: `crimson_flame`, `catppuccin_mocha`, `tokyo_night`, `dracula`, `nord`, `gruvbox_dark`.
   - Full 16 ANSI colors, 256 colors, and 24-bit TrueColor RGB support.
@@ -33,7 +33,7 @@ A modern, fast, GPU-accelerated tabbed terminal emulator written in Modern C++ (
 
 ---
 
-## ⌨️ Keybindings & Shortcuts
+## Keybindings & Shortcuts
 
 | Shortcut | Action |
 | :--- | :--- |
@@ -52,9 +52,9 @@ A modern, fast, GPU-accelerated tabbed terminal emulator written in Modern C++ (
 
 ---
 
-## ⚙️ Configuration (`~/.config/evaterm/evaterm.conf`)
+## Configuration (~/.config/evaterm/evaterm.conf)
 
-EvaTerm uses a clean `key value` configuration file format (just like `kitty.conf`):
+EvaTerm uses a clean `key value` configuration file format:
 
 ```conf
 # --- Theme Preset ---
@@ -116,7 +116,7 @@ color15 #faecec
 
 ---
 
-## 🛠️ Building & Running
+## Building & Running
 
 ```bash
 # Build
